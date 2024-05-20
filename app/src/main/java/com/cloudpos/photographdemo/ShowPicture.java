@@ -1,4 +1,4 @@
-package com.wizarpos.photographdemo;
+package com.cloudpos.photographdemo;
 
 import android.app.Activity;
 import android.content.ContentResolver;

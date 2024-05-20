@@ -1,4 +1,4 @@
-package com.wizarpos.photographdemo;
+package com.cloudpos.photographdemo;
 
 import org.junit.Test;
 

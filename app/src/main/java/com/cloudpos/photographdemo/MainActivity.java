@@ -1,11 +1,9 @@
-package com.wizarpos.photographdemo;
+package com.cloudpos.photographdemo;
 
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.hardware.Camera;
 import android.net.Uri;
 import android.os.Bundle;
@@ -21,13 +19,11 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -41,6 +37,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Camera camera;
     private Bundle bundle = null;
     private Context mContext;
+    private boolean isPreview = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,7 +82,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     for (Camera.Size ss : previewSizes) {
                         Log.d("SupportedPictureSizes", "x=" + ss.width + ",y=" + ss.height);
                     }
-                    param.setPictureSize(size.width, size.height);//如果不设置会按照系统默认配置最低160x120分辨率
+                    param.setPictureSize(size.width, size.height);
                     camera.setParameters(param);
                     camera.takePicture(null, null, new MyPictureCallback());
                 }
@@ -97,11 +94,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Intent pickIntent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
                 pickIntent.setType("image/*");
                 Intent chooserIntent = Intent.createChooser(getIntent, "Select Image");
-                chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] {pickIntent});
+                chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{pickIntent});
                 startActivityForResult(chooserIntent, 1);
                 break;
             case R.id.btn_switch: // SwitchCamera
-                int cameraCount = Camera.getNumberOfCameras();//获取摄像头数量
+                int cameraCount = Camera.getNumberOfCameras();
                 Log.d(TAG, "cameraCount   cameraCount   =   " + cameraCount);
                 showDialog();
                 break;
@@ -123,22 +120,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 camera.startPreview();
                 break;
         }
-    }
-
-
-    private void changeCamera(int cameraId, SurfaceHolder holder) {
-        camera.stopPreview();//停掉原来摄像头的预览
-        camera.release();//释放资源
-        camera = null;//取消原来摄像头
-        camera = Camera.open(cameraId);//打开当前选中的摄像头
-        try {
-            camera.setPreviewDisplay(holder);//通过surfaceview显示取景画面
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        //initCameraRotation(camera);
-        camera.setDisplayOrientation(90);
-        camera.startPreview();//开始预览
     }
 
     /**
@@ -182,7 +163,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         View view = View.inflate(mContext, R.layout.half_dialog_view, null);
         final EditText editText = (EditText) view.findViewById(R.id.dialog_edit);
         AlertDialog dialog = new AlertDialog.Builder(mContext)
-                .setTitle("switch open camera index")//设置对话框的标题
+                .setTitle("switch open camera index")
                 .setView(view)
                 .setNegativeButton("cancel", new DialogInterface.OnClickListener() {
                     @Override
@@ -202,6 +183,50 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         dialog.show();
     }
 
+    /**
+     * Save photo to SDCard
+     *
+     * @param data
+     * @throws IOException
+     */
+
+    public void saveToSDCard(byte[] data) throws IOException {
+        Date date = new Date();
+        SimpleDateFormat format = new SimpleDateFormat("yyyyMMddHHmmss");
+        String filename = format.format(date) + ".jpg";
+        File fileFolder = new File(Environment.getExternalStorageDirectory()
+                + "/Pictures/");
+        Log.e(TAG, "fileName = " + filename + "\npath = " + fileFolder);
+        if (!fileFolder.exists()) {
+            Log.e(TAG, "Directory not exist.");
+            fileFolder.mkdir();
+        }
+        File jpgFile = new File(fileFolder, filename);
+        FileOutputStream outputStream = new FileOutputStream(jpgFile);
+        outputStream.write(data);
+        outputStream.close();
+
+        //Send broadcast to update photo album. If not, you won't find the picture you saved in photo album.
+        Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+        Uri uri = Uri.fromFile(jpgFile);
+        intent.setData(uri);
+        mContext.sendBroadcast(intent);
+    }
+
+    private void changeCamera(int cameraId, SurfaceHolder holder) {
+        camera.stopPreview();
+        camera.release();
+        camera = null;
+        camera = Camera.open(cameraId);
+        try {
+            camera.setPreviewDisplay(holder);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        //initCameraRotation(camera);
+        camera.setDisplayOrientation(90);
+        camera.startPreview();
+    }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -213,6 +238,45 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             startActivity(intent);
         }
         super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    private void initParam() {
+        Camera.Parameters parameters = camera.getParameters();
+        int PreviewWidth = 0;
+        int PreviewHeight = 0;
+        // 选择合适的预览尺寸
+        List<Camera.Size> sizeList = parameters.getSupportedPreviewSizes();
+//        You can check the properties your camera support.
+        for (Camera.Size size : sizeList) {
+            Log.e(TAG, size.width + ":" +
+                    size.height + "\n");
+        }
+        if (sizeList.size() > 1) {
+            Iterator<Camera.Size> itor = sizeList.iterator();
+            while (itor.hasNext()) {
+                Camera.Size cur = itor.next();
+                if (cur.width >= PreviewWidth && cur.height >= PreviewHeight) {
+                    PreviewWidth = cur.width;
+                    PreviewHeight = cur.height;
+                    break;
+                }
+            }
+//        List<String> supportedFocusModes = parameters.getSupportedFocusModes();
+//        for (String focus : supportedFocusModes) {
+//            Log.e(TAG, focus + "\n");
+//        }
+//
+//        List<Camera.Size> supportedPictureSizes = parameters.getSupportedPictureSizes();
+//        for (Camera.Size size : supportedPictureSizes) {
+//            Log.e(TAG, size.width + ":" + size.height + "\n");
+//        }
+
+            parameters.setPreviewSize(PreviewWidth, PreviewHeight);  // Preview Size.
+//        parameters.setPictureSize(1024, 768);   // The picture size. You real get.
+//        parameters.setJpegQuality(100);
+//        parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE); // auto focus
+            camera.setParameters(parameters);
+        }
     }
 
     private final class MyPictureCallback implements Camera.PictureCallback {
@@ -227,9 +291,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             ll_post.setVisibility(View.VISIBLE);
         }
     }
-
-
-    private boolean isPreview = false;
 
     private class SurfaceCallback implements SurfaceHolder.Callback {
 
@@ -285,75 +346,5 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 camera = null;
             }
         }
-    }
-
-    private void initParam() {
-        Camera.Parameters parameters = camera.getParameters();
-        int PreviewWidth = 0;
-        int PreviewHeight = 0;
-        // 选择合适的预览尺寸
-        List<Camera.Size> sizeList = parameters.getSupportedPreviewSizes();
-//        You can check the properties your camera support.
-        for (Camera.Size size : sizeList) {
-            Log.e(TAG, size.width + ":" +
-                    size.height + "\n");
-        }
-        // 如果sizeList只有一个我们也没有必要做什么了，因为就他一个别无选择
-        if (sizeList.size() > 1) {
-            Iterator<Camera.Size> itor = sizeList.iterator();
-            while (itor.hasNext()) {
-                Camera.Size cur = itor.next();
-                if (cur.width >= PreviewWidth && cur.height >= PreviewHeight) {
-                    PreviewWidth = cur.width;
-                    PreviewHeight = cur.height;
-                    break;
-                }
-            }
-//        List<String> supportedFocusModes = parameters.getSupportedFocusModes();
-//        for (String focus : supportedFocusModes) {
-//            Log.e(TAG, focus + "\n");
-//        }
-//
-//        List<Camera.Size> supportedPictureSizes = parameters.getSupportedPictureSizes();
-//        for (Camera.Size size : supportedPictureSizes) {
-//            Log.e(TAG, size.width + ":" + size.height + "\n");
-//        }
-
-            parameters.setPreviewSize(PreviewWidth, PreviewHeight);  // Preview Size.
-//        parameters.setPictureSize(1024, 768);   // The picture size. You real get.
-//        parameters.setJpegQuality(100);
-//        parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE); // auto focus
-            camera.setParameters(parameters);
-        }
-    }
-
-    /**
-     * Save photo to SDCard
-     *
-     * @param data
-     * @throws IOException
-     */
-
-    public void saveToSDCard(byte[] data) throws IOException {
-        Date date = new Date();
-        SimpleDateFormat format = new SimpleDateFormat("yyyyMMddHHmmss");
-        String filename = format.format(date) + ".jpg";
-        File fileFolder = new File(Environment.getExternalStorageDirectory()
-                + "/Pictures/");
-        Log.e(TAG, "fileName = " + filename + "\npath = " + fileFolder);
-        if (!fileFolder.exists()) {
-            Log.e(TAG, "Directory not exist.");
-            fileFolder.mkdir();
-        }
-        File jpgFile = new File(fileFolder, filename);
-        FileOutputStream outputStream = new FileOutputStream(jpgFile);
-        outputStream.write(data);
-        outputStream.close();
-
-        //Send broadcast to update photo album. If not, you won't find the picture you saved in photo album.
-        Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-        Uri uri = Uri.fromFile(jpgFile);
-        intent.setData(uri);
-        mContext.sendBroadcast(intent);
     }
 }
