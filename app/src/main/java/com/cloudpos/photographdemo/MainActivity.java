@@ -244,7 +244,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         Camera.Parameters parameters = camera.getParameters();
         int PreviewWidth = 0;
         int PreviewHeight = 0;
-        // 选择合适的预览尺寸
+        // Choose the appropriate preview size
         List<Camera.Size> sizeList = parameters.getSupportedPreviewSizes();
 //        You can check the properties your camera support.
         for (Camera.Size size : sizeList) {
